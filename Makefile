@@ -2,7 +2,7 @@ CC = g++
 CFLAGS = -Wall -std=c++14
 
 SRC = $(wildcard src/*.cpp)
-OUT = Myslivcovi-Vzpominky
+OUT = Utulno
 
 ifeq ($(OS), Windows_NT) 
 	INCLUDE = -IC:/raylib/raylib/src 

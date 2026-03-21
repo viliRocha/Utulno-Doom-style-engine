@@ -1,11 +1,16 @@
 #include <raylib.h>
 #include <math.h>
+#include <stdio.h>
+
+#include "../textures/T_00.h"
 
 constexpr int screenWidth = 240;
 constexpr int screenHeight = 180;
 constexpr int scale = 4;
-constexpr int numSect = 4;
-constexpr int numWalls = 16;
+constexpr int numTexures = 1;
+
+int numSect = 4;
+int numWalls = 16;
 
 typedef struct {
     float cos[360];
@@ -21,18 +26,27 @@ typedef struct {
 typedef struct {
     int x1,y1; //bottom line point 1
     int x2,y2; //bottom line point 2
-    Color c;     //wall color
-}walls; walls W[30];
+    Color c;   //wall color
+    int wt,u,v; //wall texture and u/v tile
+    int shade; //shade of the wall
+}walls; walls W[256];
 
 typedef struct {
-    int ws,we;     //wall number start and end
-    int z1,z2;     //height of bottom and top 
-    int d;         //add y distances to sort drawing order
+    int ws,we;      //wall number start and end
+    int z1,z2;      //height of bottom and top 
+    int d;          //add y distances to sort drawing order
     Color c1,c2;     //bottom and top color
+    int st,ss;      //surface texture, surface scale 
     int surfBottom[screenWidth]; // Bottom limits
-    int surfTop[screenWidth];    // Top limits
+    int surfTop[screenWidth]; // Top limits
     int surface;   //is there a surfaces to draw
-}sectors; sectors S[30];
+}sectors; sectors S[128];
+
+
+typedef struct {
+    int w,h;                          //texture width/height
+    const unsigned char *name;        //texture name
+}TextureMaps; TextureMaps Textures[64]; //increase for more textures
 
 void rad_to_degrees() {
     for (int x=0; x<360; x++) {
@@ -41,6 +55,43 @@ void rad_to_degrees() {
     }
 }
 
+void load() {
+    FILE *fp = fopen("level.h","r");
+
+    if (fp == NULL) { 
+        printf("Error opening level.h"); 
+        return;
+    }
+    int s,w;
+
+    fscanf(fp,"%i",&numSect);   //number of sectors
+    //load all sectors
+    for(s=0; s < numSect; s++) {
+        fscanf(fp,"%i",&S[s].ws);  
+        fscanf(fp,"%i",&S[s].we); 
+        fscanf(fp,"%i",&S[s].z1);  
+        fscanf(fp,"%i",&S[s].z2); 
+        fscanf(fp,"%i",&S[s].st); 
+        fscanf(fp,"%i",&S[s].ss);  
+    }
+
+    fscanf(fp,"%i",&numWalls);   //number of walls
+    //load all walls
+    for(s=0; s < numWalls; s++) {
+        fscanf(fp,"%i",&W[s].x1);  
+        fscanf(fp,"%i",&W[s].y1); 
+        fscanf(fp,"%i",&W[s].x2);  
+        fscanf(fp,"%i",&W[s].y2); 
+        fscanf(fp,"%i",&W[s].wt);
+        fscanf(fp,"%i",&W[s].u); 
+        fscanf(fp,"%i",&W[s].v);  
+        fscanf(fp,"%i",&W[s].shade);  
+    }
+    fscanf(fp,"%i %i %i %i %i", &P.x, &P.y, &P.z, &P.a, &P.l); //player position, angle, look direction 
+    fclose(fp); 
+}
+
+/*
 sectors loadSectors[]={
     //wall start, wall end, z1 height, z2 height, y distances, bottom color, top color - surf and surface are not initialized
     {0,  4, 0, 40, 0, ORANGE, YELLOW},//sector 1
@@ -65,18 +116,13 @@ walls loadWalls[]={
     96, 64, 96, 96, Color{190, 33, 55, 105},
     96, 96, 64, 96, Color{230, 41, 55, 105}, // Transparent red
     64, 96, 64, 64, Color{190, 33, 55, 105}, // Transparent maroon
-   /*
-    64, 64, 96, 64, RED,
-    96, 64, 96, 96, MAROON,
-    96, 96, 64, 96, RED,
-    64, 96, 64, 64, MAROON,
-    */
 
     0, 64, 32, 64, PURPLE,
     32, 64, 32, 96, DARKPURPLE,
     32, 96,  0, 96, PURPLE,
     0, 96,  0, 64, DARKPURPLE,
 };
+*/
 
 void init() {
     P.x=-32;
@@ -88,7 +134,7 @@ void init() {
     rad_to_degrees();
 
     DisableCursor();
-
+    /*
     //load sectors
     int s, w, v2=0;
     for(s=0; s<numSect; s++) {
@@ -104,6 +150,11 @@ void init() {
             v2++;
         }
     }
+        */
+    //define textures
+    Textures[0].name = T_00; 
+    Textures[0].h = T_00_HEIGHT; 
+    Textures[ 0].w = T_00_WIDTH;
 }
 
 void movePlayer() {
@@ -326,7 +377,11 @@ void draw3D() {
                 wz[0] = S[s].z1 - P.z + ((P.l * wy[0]) / 32);
                 wz[1] = S[s].z1 - P.z + ((P.l * wy[1]) / 32);
                 wz[2] = wz[0] + S[s].z2; //top line has new z 
-                wz[3] = wz[1] + S[s].z2; 
+                wz[3] = wz[1] + S[s].z2;
+                /*
+                wz[2]=S[s].z2-P.z+((P.l*wy[0])/32.0);
+                wz[3]=S[s].z2-P.z+((P.l*wy[1])/32.0);
+                */
 
                 //  Dont draw wall behind player
                 if (wy[0] < 1 && wy[1] < 1) {
@@ -360,7 +415,7 @@ void draw3D() {
                 drawWall(wx[0], wx[1], wy[0], wy[1], wy[2], wy[3], W[w].c, s);
             }
             S[s].d /= (S[s].we - S[s].ws); //find average sector distance
-            S[s].surface *= -1; //flip to negative to draw surface (first time the loop that draws x verstical lines runs, it saves the top and bottom values, the next time it uses them)
+            //S[s].surface *= -1; //flip to negative to draw surface (first time the loop that draws x verstical lines runs, it saves the top and bottom values, the next time it uses them)
         }
 
         if (sectorTransparent) {
@@ -391,6 +446,11 @@ int main() {
             ClearBackground((Color){25, 25, 112, 255});
 
             movePlayer();
+
+            if (IsKeyDown(KEY_ENTER)) {
+                load(); // load level
+            }
+
             draw3D();
 
             DrawText(TextFormat("Player Position: %i, %i, %i", P.x, P.y, P.z), 10, 10, 20, GREEN);
