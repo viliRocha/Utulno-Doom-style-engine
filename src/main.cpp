@@ -4,49 +4,18 @@
 
 #include "../textures/T_00.h"
 
-constexpr int screenWidth = 240;
-constexpr int screenHeight = 180;
-constexpr int scale = 4;
-constexpr int numTexures = 1;
+#include "game.h"
+#include "levelEditor.h"
 
 int numSect = 4;
 int numWalls = 16;
 
-typedef struct {
-    float cos[360];
-    float sin[360];
-}math; math M;
-
-typedef struct {
-    int x, y, z;
-    int a; //   Rotation angle
-    int l; //   Look up and down
-}player; player P;
-
-typedef struct {
-    int x1,y1; //bottom line point 1
-    int x2,y2; //bottom line point 2
-    Color c;   //wall color
-    int wt,u,v; //wall texture and u/v tile
-    int shade; //shade of the wall
-}walls; walls W[256];
-
-typedef struct {
-    int ws,we;      //wall number start and end
-    int z1,z2;      //height of bottom and top 
-    int d;          //add y distances to sort drawing order
-    Color c1,c2;     //bottom and top color
-    int st,ss;      //surface texture, surface scale 
-    int surfBottom[screenWidth]; // Bottom limits
-    int surfTop[screenWidth]; // Top limits
-    int surface;   //is there a surfaces to draw
-}sectors; sectors S[128];
-
-
-typedef struct {
-    int w,h;                          //texture width/height
-    const unsigned char *name;        //texture name
-}TextureMaps; TextureMaps Textures[64]; //increase for more textures
+math M;
+player P;
+walls W[256];
+sectors S[128];
+TextureMaps Textures[64];
+Texture2D texturesRaylib[64];
 
 void rad_to_degrees() {
     for (int x=0; x<360; x++) {
@@ -89,6 +58,10 @@ void load() {
     }
     fscanf(fp,"%i %i %i %i %i", &P.x, &P.y, &P.z, &P.a, &P.l); //player position, angle, look direction 
     fclose(fp); 
+
+    printf("numSect=%d\n", numSect);
+    printf("numWalls=%d\n", numWalls);
+    printf("Player: %d %d %d %d %d\n", P.x, P.y, P.z, P.a, P.l);
 }
 
 /*
@@ -125,11 +98,14 @@ walls loadWalls[]={
 */
 
 void init() {
+    /*
     P.x=-32;
     P.y=307;
     P.z=20;
     P.a=162;
     P.l=0;
+    */
+
 
     rad_to_degrees();
 
@@ -151,10 +127,19 @@ void init() {
         }
     }
         */
+
+    load(); // load level
+
     //define textures
-    Textures[0].name = T_00; 
-    Textures[0].h = T_00_HEIGHT; 
-    Textures[ 0].w = T_00_WIDTH;
+    // converter array .h para Image e depois Texture2D
+    Image img = LoadImageFromMemory(".png", T_00, T_00_WIDTH * T_00_HEIGHT * 3);
+    Textures[0].w = T_00_WIDTH;
+    Textures[0].h = T_00_HEIGHT;
+    Texture2D tex00 = LoadTextureFromImage(img);
+    UnloadImage(img);
+
+    // guarde em uma variável global separada
+    texturesRaylib[0] = tex00;
 }
 
 void movePlayer() {
@@ -433,6 +418,8 @@ void draw3D() {
     }
 }
 
+bool editorMode = true;
+
 int main() {
     //SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(screenWidth * scale, screenHeight * scale, "Myslivcovi-Vzpominky");
@@ -445,13 +432,16 @@ int main() {
         BeginDrawing();
             ClearBackground((Color){25, 25, 112, 255});
 
-            movePlayer();
-
-            if (IsKeyDown(KEY_ENTER)) {
-                load(); // load level
+            if (editorMode) {
+                draw2D();   // editor
+                if (IsKeyPressed(KEY_F5)) {
+                    save(); // salva level.h
+                }
             }
-
-            draw3D();
+            else {
+                movePlayer();
+                draw3D();
+            }
 
             DrawText(TextFormat("Player Position: %i, %i, %i", P.x, P.y, P.z), 10, 10, 20, GREEN);
             DrawText(TextFormat("FPS: %i", GetFPS()), 10, 30, 20, GREEN);
